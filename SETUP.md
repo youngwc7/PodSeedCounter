@@ -1,6 +1,6 @@
 # Seed counter: setup guide
 
-Version 2.4.2. This guide installs the program. How to use it is in `MANUAL.md`.
+Version 2.5.0. This guide installs the program. How to use it is in `MANUAL.md`.
 
 The commands are for **Windows** (PowerShell or Command Prompt). On Linux, use `/` instead of `\`,
 `python3` instead of `python`, and `.venv/bin/python` instead of `.venv\Scripts\python`.

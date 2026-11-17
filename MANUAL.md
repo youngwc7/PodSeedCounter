@@ -1,6 +1,6 @@
 # Seed counter: user manual
 
-Version 2.4.2. Installation is described in `SETUP.md`.
+Version 2.5.0. Installation is described in `SETUP.md`.
 
 The seed counter finds the pods in transmitted-light microscope images (`.tif`), counts the seeds in each pod,
 draws a border around every seed and tells you which counts it is unsure about. In the **review page** you
@@ -638,21 +638,33 @@ still used.
 ## 22. How the counting works
 
 1. **Loading**: the largest page of the TIFF (multi-page, compressed and 16-bit files are handled), analysed at half size.
-2. **Pods**: separated from the white background by colour saturation and numbered from top to bottom. The top and
+2. **Pods**: separated from the white background by colour saturation and numbered from top to bottom. Pods may
+   touch or overlap: where a column of the pod area is much taller than one pod (1.4 pod widths), two pods are
+   fused there. They are cut apart along a smooth seam through the palest pixels; where the two pods part next to
+   the fused stretch, the seam is joined to that real gap, otherwise it is followed until they part. Such pods are
+   noted "pod touched another pod; separated automatically along the seam". The top and
    bottom outline of each pod is traced; the **centerline** is their smoothed middle. The **bud cut** is where the pod
    reaches 60 % of its width (and at least half a pod width from the tip); the **stem cut** is where the width drops
    below 60 % at the stem.
 3. **Contrast**: seeds absorb green light most, so a seed shows up as an area of the green channel that is darker
    than the surrounding pod. Comparing with the local pod tone makes this work for dark and pale pods alike.
-4. **Seeds**: seed centres are the darkest points; borders grow outwards from them. A border much larger than a seed
-   that lies on both sides of the centerline is split into a top and a bottom seed.
+4. **Seeds** (elliptical shape filter): the contrast map is compared with seed-shaped ellipses of several sizes,
+   lengths and angles (dark inside, lighter ring around). Seeds lie lengthwise in the pod, so the long axis may turn
+   at most 30 degrees from the pod axis. Every local best match is a candidate seed with its own ellipse; candidates
+   are accepted strongest first. A candidate is rejected if its ellipse is not filled by one dark spot (e.g. it sits
+   on the gap between two seeds), if it is much paler than the pod's typical seed, or if its core is already taken by
+   an accepted seed. Touching and slightly overlapping seeds are therefore separated by their shape, not by a
+   minimum distance or by darkness alone. A seed's border is its ellipse. The earlier darkest-point method is still
+   available with `segmentation.method: contrast`.
 5. **Confidence**: each seed's confidence comes from its contrast, size, shape, how far it crosses the centerline,
-   whether it was split, and how close it is to a pod end. The pod confidence combines its seeds' confidences, open
+   whether it shares one dark area with another seed (it was separated from a touching seed), and how close it is to a pod end. The pod confidence combines its seeds' confidences, open
    dark areas and missing pod ends.
 
 ## 23. Accuracy, limitations and troubleshooting
 
-**Accuracy on the two example images** used during development (after tuning on these same images, so optimistic):
+**Accuracy on the two example images** used during development (version 2.4 with the earlier darkest-point
+method, after tuning on these same images, so optimistic; version 2.5's elliptical filter has not yet been
+re-measured on them: run `python -m pytest` with the example images in `tests/data`, or `scripts/evaluate.py`):
 
 | Image | Program, per pod | Hand count, per pod | Total |
 |---|---|---|---|
@@ -660,12 +672,23 @@ still used.
 | 09_1829px6_06 | 29, 19, 20, 31, 24, 24 | 27, 19, 20, 32, 23, 24 | 147 vs 145 |
 
 The total per-pod error is 8 seeds over 11 pods (1.9 %); the pod with the largest error is the one flagged *maybe*.
+
+Version 2.5 was developed on `07_1827px6_08` (six pods, two pairs touching; tuned on this image, so optimistic):
+
+| Version | Program, per pod | Hand count, per pod | Total | Per-pod error |
+|---|---|---|---|---|
+| 2.4 | 4 pods found: 38, 55, 48, 23 | 29, 23, 28, 19, 23, 22 | 164 vs 144 | pods merged |
+| 2.4 + pod separation | 38, 24, 32, 22, 29, 23 | 29, 23, 28, 19, 23, 22 | 168 vs 144 | 24 seeds |
+| 2.5 | 30, 23, 28, 21, 23, 22 | 29, 23, 28, 19, 23, 22 | 147 vs 144 | 3 seeds (2.1 %) |
 Expect larger errors on new kinds of images until some of them are checked and the program has learned from them.
 
 **Limitations**
 
-- Pods should lie roughly horizontally, bud on the left, stem on the right, on a white background. Strongly tilted or
-  touching pods are flagged.
+- Pods should lie roughly horizontally, bud on the left, stem on the right, on a white background. Strongly tilted
+  pods are flagged. Touching pods are separated automatically and flagged; this needs most pods of the image to be
+  apart somewhere (their typical width is measured where they are apart). If a seam is wrong, use *Split pod*.
+- The elliptical filter assumes seeds lie lengthwise (within 30 degrees of the pod axis); change
+  `segmentation.ellipse.max_angle_to_pod` if your seeds lie across the pod.
 - Seeds that overlap almost completely may be counted as one; a single elongated seed across the centerline is
   occasionally split in two. Both usually show orange or red.
 - Handwritten numbers on annotations are not read.
